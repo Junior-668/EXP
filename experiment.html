@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en">
+<a href="setup.html"><button style="background-color:#2563eb;">View Setup Guide</button></a>
+</a>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Ticker Timer Physics Lab</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f7f6;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        h1 { color: #00563B; margin-bottom: 5px; }
+        h3 { color: #555; margin-top: 0; }
+
+        .container {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            max-width: 850px;
+            width: 100%;
+        }
+
+        .controls {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 15px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        button {
+            padding: 10px 16px;
+            font-size: 14px;
+            font-weight: bold;
+            color: #fff;
+            background-color: #00563B;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        button:hover { background-color: #003d29; }
+        button.reset { background-color: #b30000; }
+        button.reset:hover { background-color: #800000; }
+        button.toggle-voice { background-color: #2563eb; }
+        button.toggle-voice:hover { background-color: #1d4ed8; }
+
+        canvas {
+            background-color: #f9f9f9;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            display: block;
+            margin: 0 auto 12px auto;
+        }
+
+        .explanation-card {
+            background-color: #e8f4ec;
+            border-left: 5px solid #00563B;
+            padding: 15px;
+            border-radius: 4px;
+            font-size: 14px;
+            line-height: 1.6;
+            margin-top: 10px;
+        }
+
+        .step-badge {
+            display: inline-block;
+            background-color: #00563B;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Ticker Timer Interactive Lab</h1>
+    <h3>Grade 10 Physical Sciences — Motion Practical</h3>
+
+    <div class="controls">
+        <button onclick="startRun(1)">Play Run 1 (Constant Velocity)</button>
+        <button onclick="startRun(2)">Play Run 2 (Constant Acceleration)</button>
+        <button class="reset" onclick="resetSimulation()">Reset</button>
+        <button class="toggle-voice" onclick="toggleVoice()">Voice Narration: <span id="voiceStatus">ON</span></button>
+    </div>
+
+    <!-- Main Motion Canvas -->
+    <canvas id="simCanvas" width="800" height="200"></canvas>
+    
+    <!-- Real-time Graph Canvas -->
+    <canvas id="graphCanvas" width="800" height="160"></canvas>
+
+    <!-- Step-by-Step Live Explanation -->
+    <div class="explanation-card" id="explanationBox">
+        <span class="step-badge">STATUS: READY</span>
+        <div id="explanationText">
+            Select a run above to launch the experiment. The narrator will explain the setup first, then the trolley will move, and finally the narrator will read out the results!
+        </div>
+    </div>
+</div>
+
+<script>
+    const simCanvas = document.getElementById("simCanvas");
+    const simCtx = simCanvas.getContext("2d");
+
+    const graphCanvas = document.getElementById("graphCanvas");
+    const graphCtx = graphCanvas.getContext("2d");
+
+    let animId = null;
+    let x = 50;
+    let v = 0;
+    let a = 0;
+    let dots = [];
+    let frameCount = 0;
+    let isRunning = false;
+    let currentRun = 1;
+
+    // Audio & Speech Synthesis Variables
+    let audioCtx = null;
+    let voiceEnabled = true;
+    const synth = window.speechSynthesis;
+
+    function initAudio() {
+        if (!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+    }
+
+    function toggleVoice() {
+        voiceEnabled = !voiceEnabled;
+        document.getElementById("voiceStatus").innerText = voiceEnabled ? "ON" : "OFF";
+        if (!voiceEnabled && synth) {
+            synth.cancel();
+        }
+    }
+
+    function speakText(text) {
+        if (!voiceEnabled || !synth) return;
+        synth.cancel();
+        let utterance = new SpeechSynthesisUtterance(text);
+        utterance.rate = 1.0;
+        utterance.pitch = 1.0;
+        synth.speak(utterance);
+    }
+
+    function speakTextThen(text, callback) {
+        if (!voiceEnabled || !synth) {
+            callback();
+            return;
+        }
+        synth.cancel();
+        let utterance = new SpeechSynthesisUtterance(text);
+        utterance.rate = 1.0;
+        
+        utterance.onend = function() {
+            callback();
+        };
+        
+        utterance.onerror = function() {
+            callback();
+        };
+
+        synth.speak(utterance);
+    }
+
+    function playTickerSound() {
+        if (!audioCtx) return;
+        let osc = audioCtx.createOscillator();
+        let gain = audioCtx.createGain();
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(800, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.03, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.03);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.03);
+    }
+
+    function resetSimulation() {
+        if (animId) cancelAnimationFrame(animId);
+        if (synth) synth.cancel();
+        
+        isRunning = false;
+        x = 50;
+        v = 0;
+        a = 0;
+        dots = [50];
+        frameCount = 0;
+        
+        drawScene();
+        drawGraph();
+        
+        document.getElementById("explanationBox").innerHTML = `
+            <span class="step-badge">STATUS: RESET</span>
+            <div>Simulation reset. Choose <b>Run 1</b> or <b>Run 2</b> to begin.</div>
+        `;
+    }
+
+    function startRun(runNumber) {
+        initAudio();
+        resetSimulation();
+        currentRun = runNumber;
+
+        if (runNumber === 1) {
+            v = 2.0;
+            a = 0;
+            let introMsg = "Starting Run 1. Friction compensated slope. The trolley will now move at constant velocity with acceleration equal to zero.";
+            
+            document.getElementById("explanationBox").innerHTML = `
+                <span class="step-badge">RUN 1: INTRO</span>
+                <div><b>Listen to Explanation:</b> ${introMsg}</div>
+            `;
+
+            speakTextThen(introMsg, function() {
+                isRunning = true;
+                document.getElementById("explanationBox").innerHTML = `
+                    <span class="step-badge">RUN 1: IN MOTION</span>
+                    <div><b>Observe Motion:</b> Trolley moving at constant velocity. Watch the equal dot spacing!</div>
+                `;
+                animate();
+            });
+
+        } else {
+            v = 0.3;
+            a = 0.05;
+            let introMsg = "Starting Run 2. Steeper slope. Gravitational force will accelerate the trolley down the track.";
+
+            document.getElementById("explanationBox").innerHTML = `
+                <span class="step-badge">RUN 2: INTRO</span>
+                <div><b>Listen to Explanation:</b> ${introMsg}</div>
+            `;
+
+            speakTextThen(introMsg, function() {
+                isRunning = true;
+                document.getElementById("explanationBox").innerHTML = `
+                    <span class="step-badge">RUN 2: IN MOTION</span>
+                    <div><b>Observe Motion:</b> Trolley accelerating. Watch the dot gaps get wider!</div>
+                `;
+                animate();
+            });
+        }
+    }
+
+    function animate() {
+        if (!isRunning) return;
+
+        // Motion Equations
+        x += v;
+        v += a;
+        frameCount++;
+
+        // Ticker Tape Stamp
+        if (frameCount % 6 === 0) {
+            dots.push(x);
+            playTickerSound();
+        }
+
+        drawScene();
+        drawGraph();
+
+        // End of Track Stopper reached
+        if (x >= 700) {
+            isRunning = false;
+            showFinalResults();
+            return;
+        }
+
+        animId = requestAnimationFrame(animate);
+    }
+
+    function showFinalResults() {
+        let box = document.getElementById("explanationBox");
+
+        if (currentRun === 1) {
+            let spokenSummary = "Experiment complete. Results: Equal dot spacing indicates constant velocity, yielding a straight position time graph with zero acceleration.";
+            speakText(spokenSummary);
+
+            box.innerHTML = `
+                <span class="step-badge" style="background-color: #00563B;">RUN 1 RESULTS & EXPLANATION</span>
+                <div>
+                    <b>1. Tape Pattern:</b> Equal spaces between dots mean equal displacement in equal time intervals.<br>
+                    <b>2. Velocity:</b> Constant speed throughout the entire trip.<br>
+                    <b>3. Position Graph:</b> A straight line with a constant gradient.<br>
+                    <b>4. Resulting Acceleration:</b> Acceleration equals zero.
+                </div>
+            `;
+        } else {
+            let spokenSummary = "Experiment complete. Results: Dots grow progressively further apart. The parabolic curve on the position time graph confirms constant uniform acceleration.";
+            speakText(spokenSummary);
+
+            box.innerHTML = `
+                <span class="step-badge" style="background-color: #b30000;">RUN 2 RESULTS & EXPLANATION</span>
+                <div>
+                    <b>1. Tape Pattern:</b> Spaces between dots grow progressively larger toward the end of the tape.<br>
+                    <b>2. Velocity:</b> Speed increases constantly over time.<br>
+                    <b>3. Position Graph:</b> A smooth upward curve showing increasing slope.<br>
+                    <b>4. Resulting Acceleration:</b> Acceleration is greater than zero (Uniform Acceleration).
+                </div>
+            `;
+        }
+    }
+
+    function drawScene() {
+        simCtx.clearRect(0, 0, simCanvas.width, simCanvas.height);
+
+        let angleY = currentRun === 2 ? 150 : 170;
+
+        // Runway
+        simCtx.beginPath();
+        simCtx.moveTo(30, 80);
+        simCtx.lineTo(720, angleY);
+        simCtx.lineWidth = 4;
+        simCtx.strokeStyle = "#444";
+        simCtx.stroke();
+
+        // Stopper
+        simCtx.fillStyle = "#b30000";
+        simCtx.fillRect(710, angleY - 30, 15, 30);
+
+        // Ticker Timer Unit
+        simCtx.fillStyle = "#00563B";
+        simCtx.fillRect(20, 50, 30, 35);
+        simCtx.fillStyle = "#fff";
+        simCtx.font = "10px Arial";
+        simCtx.fillText("50Hz", 23, 70);
+
+        // Ticker Tape Strip
+        simCtx.beginPath();
+        simCtx.moveTo(50, 67);
+        simCtx.lineTo(x, angleY - 15);
+        simCtx.lineWidth = 6;
+        simCtx.strokeStyle = "#e6d8ad";
+        simCtx.stroke();
+
+        // Dots on Ticker Tape
+        dots.forEach(dotX => {
+            let ratio = (dotX - 50) / (720 - 50);
+            let dotY = 67 + ratio * (angleY - 15 - 67);
+            simCtx.beginPath();
+            simCtx.arc(dotX, dotY, 2.5, 0, Math.PI * 2);
+            simCtx.fillStyle = "#000";
+            simCtx.fill();
+        });
+
+        // Trolley
+        let ratio = (x - 50) / (720 - 50);
+        let trolleyY = 67 + ratio * (angleY - 15 - 67) - 15;
+
+        simCtx.fillStyle = "#2c3e50";
+        simCtx.fillRect(x - 20, trolleyY - 15, 40, 20);
+        simCtx.beginPath();
+        simCtx.arc(x - 12, trolleyY + 5, 5, 0, Math.PI * 2);
+        simCtx.arc(x + 12, trolleyY + 5, 5, 0, Math.PI * 2);
+        simCtx.fillStyle = "#111";
+        simCtx.fill();
+    }
+
+    function drawGraph() {
+        graphCtx.clearRect(0, 0, graphCanvas.width, graphCanvas.height);
+
+        // Graph Axes
+        graphCtx.beginPath();
+        graphCtx.moveTo(60, 15);
+        graphCtx.lineTo(60, 130);
+        graphCtx.lineTo(760, 130);
+        graphCtx.lineWidth = 2;
+        graphCtx.strokeStyle = "#333";
+        graphCtx.stroke();
+
+        // Labels
+        graphCtx.fillStyle = "#00563B";
+        graphCtx.font = "bold 11px Arial";
+        graphCtx.fillText("Position x (m)", 5, 12);
+        graphCtx.fillText("Time t (s)", 710, 150);
+
+        // Draw Plot
+        if (dots.length > 1) {
+            graphCtx.beginPath();
+            graphCtx.strokeStyle = currentRun === 1 ? "#00563B" : "#b30000";
+            graphCtx.lineWidth = 2.5;
+
+            dots.forEach((dotX, idx) => {
+                let graphX = 60 + idx * 23;
+                let graphY = 130 - (dotX - 50) * 0.16;
+                if (idx === 0) graphCtx.moveTo(graphX, graphY);
+                else graphCtx.lineTo(graphX, graphY);
+            });
+            graphCtx.stroke();
+        }
+    }
+
+    drawScene();
+    drawGraph();
+</script>
+
+</body>
+</html>

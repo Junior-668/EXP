@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Equipment Setup Guide — Ticker Timer Practical</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; color: #333; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; }
+        .container { background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); max-width: 750px; width: 100%; text-align: center; }
+        h1 { color: #00563B; }
+        .step-box { background-color: #e8f4ec; border-left: 5px solid #00563B; padding: 15px; border-radius: 4px; text-align: left; font-size: 15px; margin-top: 15px; }
+        .controls { margin-top: 15px; display: flex; gap: 10px; justify-content: center; }
+        button { padding: 10px 18px; font-size: 14px; font-weight: bold; color: #fff; background-color: #00563B; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background-color: #003d29; }
+        canvas { background-color: #f9f9f9; border: 1px solid #ccc; border-radius: 4px; display: block; margin: 0 auto; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+</div>
+
+    <h1>Apparatus Setup Walkthrough</h1>
+    <p>Step-by-step guide to preparing your workbench before conducting the experiment.</p>
+    
+    <canvas id="setupCanvas" width="700" height="220"></canvas>
+
+    <div class="controls">
+        <button onclick="prevStep()">← Previous Step</button>
+        <button onclick="nextStep()">Next Step →</button>
+    </div>
+
+    <div class="step-box" id="stepText">
+        </div>
+</div>
+
+<script>
+    let currentStep = 1;
+    const canvas = document.getElementById("setupCanvas");
+    const ctx = canvas.getContext("2d");
+
+    const steps = [
+        { title: "Step 1: Set Up Track & Stopper", text: "Place the runway flat on the workbench. Clamp a wooden or rubber stopper firmly at the bottom end to prevent the trolley from rolling off." },
+        { title: "Step 2: Raise the Incline", text: "Place 1–2 books under the top end of the track. For Run 1 (constant velocity), adjust the angle until the trolley rolls smoothly after a gentle tap." },
+        { title: "Step 3: Mount Ticker Timer", text: "Clamp the 50 Hz ticker timer firmly at the raised top end of the track so it does not shake during the run." },
+        { title: "Step 4: Thread Ticker Tape", text: "Cut a length of tape equal to the track. Thread it through the carbon disc guide and tape one end securely to the trolley." }
+    ];
+
+    function updateStep() {
+        document.getElementById("stepText").innerHTML = `<b>${steps[currentStep - 1].title}</b><br>${steps[currentStep - 1].text}`;
+        drawSetup();
+    }
+
+    function nextStep() {
+        if (currentStep < steps.length) { currentStep++; updateStep(); }
+    }
+
+    function prevStep() {
+        if (currentStep > 1) { currentStep--; updateStep(); }
+    }
+
+    function drawSetup() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Runway
+        ctx.beginPath();
+        ctx.moveTo(50, 180 - (currentStep > 1 ? 30 : 0));
+        ctx.lineTo(650, 180);
+        ctx.lineWidth = 4;
+        ctx.strokeStyle = "#444";
+        ctx.stroke();
+
+        // Books (Step 2+)
+        if (currentStep >= 2) {
+            ctx.fillStyle = "#b45309";
+            ctx.fillRect(40, 150, 40, 30);
+        }
+
+        // Stopper (Step 1+)
+        ctx.fillStyle = "#b30000";
+        ctx.fillRect(640, 150, 15, 30);
+
+        // Ticker Timer (Step 3+)
+        if (currentStep >= 3) {
+            ctx.fillStyle = "#00563B";
+            ctx.fillRect(40, 115, 30, 35);
+            ctx.fillStyle = "#fff";
+            ctx.font = "10px Arial";
+            ctx.fillText("50Hz", 43, 135);
+        }
+
+        // Trolley & Tape (Step 4)
+        if (currentStep >= 4) {
+            ctx.beginPath();
+            ctx.moveTo(70, 132);
+            ctx.lineTo(150, 150);
+            ctx.lineWidth = 4;
+            ctx.strokeStyle = "#e6d8ad";
+            ctx.stroke();
+
+            ctx.fillStyle = "#2c3e50";
+            ctx.fillRect(150, 135, 40, 20);
+        }
+    }
+
+    updateStep();
+</script>
+
+</body>
+</html>
